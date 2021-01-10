@@ -1,0 +1,159 @@
+---
+title: "Human Activity Classification"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document: 
+    fig_caption: yes
+    number_sections: yes
+    keep_md: yes
+  word_document:
+    fig_caption: yes
+    number_sections: yes
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn=-1)
+```
+
+```{r echo=FALSE}
+set.seed(1703)
+fig_cap <- captioner::captioner()
+tab_cap <- captioner::captioner("Table")
+```
+
+# Abstract
+In recent years, there has been a significant increase in data measured from human activity/exercise thanks to the advent of wearable devices. Large amount of human activity data enables development of machine learning and deep learning to perform human activity prediction/classification, which would have potential impacts in improving human healthy and quality of life. In this report, we will build a machine learning model to classify how well the "Unilateral Dumbbell Biceps Curl" is performed using the "Weight Lifting Exercises Dataset".  
+
+
+# Getting data
+
+Let's download and read the data.
+```{r cache=TRUE}
+url_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+fname_train <- "pml-training.csv"
+download.file(url_train,fname_train)
+df_train = read.csv(fname_train)
+
+url_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+fname_test <- "pml-testing.csv"
+download.file(url_test,fname_test)
+df_test = read.csv(fname_test)
+```
+
+# Exploratory Data Analysis
+
+There are 5 class labels, which are A (i.e. correct movement) and B, C, D, and E (4 classes corresponding to common incorrect movements). 
+```{r}
+library(knitr)
+kable(t(data.frame(labels = unique(df_train$classe))))
+```
+
+
+Let's check how the "roll_belt" predictor looks for each subject
+```{r cache=TRUE}
+library(ggplot2)
+ggplot(data = df_train, aes(x=user_name,y=roll_belt, colour=classe)) +
+  geom_point() + 
+  geom_jitter()
+```
+```{r cache=TRUE}
+ggplot(data = df_train, aes(x=user_name,y=total_accel_arm, colour=classe)) +
+  geom_point() +
+  geom_jitter()
+```
+
+```{r cache=TRUE}
+ggplot(data = df_train, aes(x=user_name,y=yaw_belt, colour=classe)) +
+  geom_point() +
+  geom_jitter()
+```
+
+
+
+```{r cache=TRUE}
+ggplot(data = df_train, aes(x=user_name,y=magnet_dumbbell_z, colour=classe)) +
+  geom_point() +
+  geom_jitter()
+```
+
+
+
+```{r cache=TRUE}
+ggplot(data = df_train, aes(x=user_name,y=log(gyros_dumbbell_y+10) , colour=classe)) +
+  geom_point() +
+  geom_jitter()
+```
+
+# Feature Selections
+Based on manual inspection and insights from the "Exploratory Data Analysis" section, we decided to include 52 numeric predictors as below.
+
+```{r}
+suppressMessages(library(dplyr))
+df_train1 <- select(df_train, 
+                    starts_with("total"), 
+                    starts_with("gyros"),
+                    starts_with("accel"),
+                    starts_with("magnet"),
+                    starts_with("roll"),
+                    starts_with("pitch"),
+                    starts_with("yaw"),
+                    starts_with("classe"))
+df_test1 <- select(df_test, 
+                   starts_with("total"),
+                   starts_with("accel"),
+                   starts_with("magnet"),
+                   starts_with("roll"),
+                   starts_with("pitch"),
+                   starts_with("yaw"),
+                   starts_with("gyros"),)
+```
+
+
+# Build Random Forest Model using 5-fold cross-validation
+
+Let's build a random forest classification model using caret package.
+
+```{r cache=TRUE}
+library(caret)
+set.seed(12345)
+trainctrl <- trainControl(method = "cv", number = 5, verboseIter = FALSE)
+fit_final <- train(as.factor(classe) ~ ., 
+                data = df_train1, 
+                method = "rf", 
+                trControl=trainctrl,
+                na.action=na.exclude)
+```
+
+Here is the summary of the trained random forest model.
+
+```{r}
+print(fit_final)
+```
+
+Here are list of features ordered based on their importance in classifying the 5 classes (A, B, C, D, E).
+
+```{r}
+suppressMessages(library(caret))
+varImp(fit_final, scale=FALSE)
+```
+
+Below is the plot of 5 predictors with highest importance.
+```{r}
+plot(varImp(fit_final, scale=FALSE), top=10)
+```
+
+# Predictions of the 20 test samples
+```{r}
+predict(fit_final, df_test1)
+```
+
+# Summary
+We have build a machine learning model using random forest technique that intakes 52-predictors measured from wearable sensor to classify 5 classes. From the 5-fold cross-validation, the model achieves 99.43% accuracy.
+
+
+
